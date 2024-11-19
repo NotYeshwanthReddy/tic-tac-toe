@@ -40,12 +40,18 @@
             gap: 20px;
         }
 
-        #restart, #onePlayer, #twoPlayer {
+        #difficultyButtons {
+            margin-top: 20px;
+            display: flex;
+            gap: 20px;
+        }
+
+        #restart, #onePlayer, #twoPlayer, .difficultyBtn {
             padding: 10px 20px;
             font-size: 16px;
         }
 
-        #gameButtons {
+        #gameButtons, #difficultyButtons {
             display: none;
         }
     </style>
@@ -67,6 +73,11 @@
         <button id="onePlayer">1 Player</button>
         <button id="twoPlayer">2 Player</button>
     </div>
+    <div id="difficultyButtons">
+        <button class="difficultyBtn" data-difficulty="low">Low</button>
+        <button class="difficultyBtn" data-difficulty="medium">Medium</button>
+        <button class="difficultyBtn" data-difficulty="hard">Hard</button>
+    </div>
     <div id="gameButtons">
         <button id="restart">Restart Game</button>
     </div>
@@ -78,6 +89,8 @@
         const twoPlayerBtn = document.getElementById('twoPlayer');
         const buttonsDiv = document.getElementById('buttons');
         const gameButtonsDiv = document.getElementById('gameButtons');
+        const difficultyButtonsDiv = document.getElementById('difficultyButtons');
+        const difficultyBtns = document.querySelectorAll('.difficultyBtn');
         const winningConditions = [
             [0,1,2],
             [3,4,5],
@@ -93,10 +106,12 @@
         let currentPlayer = "X";
         let running = false;
         let singlePlayer = false;
+        let difficulty = "low"; // default difficulty level
 
         onePlayerBtn.addEventListener('click', () => {
             singlePlayer = true;
-            startGame();
+            buttonsDiv.style.display = 'none';
+            difficultyButtonsDiv.style.display = 'flex';
         });
 
         twoPlayerBtn.addEventListener('click', () => {
@@ -104,15 +119,23 @@
             startGame();
         });
 
+        difficultyBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                difficulty = btn.getAttribute('data-difficulty');
+                startGame();
+            });
+        });
+
         function startGame() {
             buttonsDiv.style.display = 'none';
+            difficultyButtonsDiv.style.display = 'none';
             gameButtonsDiv.style.display = 'block';
             cells.forEach(cell => cell.addEventListener('click', cellClicked));
             restartBtn.addEventListener('click', restartGame);
             statusText.textContent = `${currentPlayer}'s turn`;
             running = true;
             if (singlePlayer && currentPlayer === "O") {
-                computerMove();
+                setTimeout(computerMove, 500);
             }
         }
 
@@ -175,7 +198,29 @@
         function computerMove() {
             if (!running) return;
 
-            // Simple AI: Choose a random empty cell
+            let move;
+            switch(difficulty) {
+                case "low":
+                    move = getRandomMove();
+                    break;
+                case "medium":
+                    move = getMediumMove();
+                    break;
+                case "hard":
+                    move = getBestMove(options, "O").index;
+                    break;
+                default:
+                    move = getRandomMove();
+            }
+
+            if (move !== undefined) {
+                const cell = document.querySelector(`.cell[data-cell-index='${move}']`);
+                updateCell(cell, move);
+                checkWinner();
+            }
+        }
+
+        function getRandomMove() {
             let emptyCells = [];
             options.forEach((value, index) => {
                 if (value === "") {
@@ -187,10 +232,101 @@
                 return;
             }
 
-            const randomIndex = emptyCells[Math.floor(Math.random() * emptyCells.length)];
-            const cell = document.querySelector(`.cell[data-cell-index='${randomIndex}']`);
-            updateCell(cell, randomIndex);
-            checkWinner();
+            return emptyCells[Math.floor(Math.random() * emptyCells.length)];
+        }
+
+        function getMediumMove() {
+            // First, check if we can win in the next move
+            for (let i = 0; i < options.length; i++) {
+                if (options[i] === "") {
+                    options[i] = "O";
+                    if (checkWin("O")) {
+                        options[i] = "";
+                        return i;
+                    }
+                    options[i] = "";
+                }
+            }
+            // Then, check if the player could win on their next move, and block them
+            for (let i = 0; i < options.length; i++) {
+                if (options[i] === "") {
+                    options[i] = "X";
+                    if (checkWin("X")) {
+                        options[i] = "";
+                        return i;
+                    }
+                    options[i] = "";
+                }
+            }
+            // Otherwise, move randomly
+            return getRandomMove();
+        }
+
+        function checkWin(player) {
+            for(let i = 0; i < winningConditions.length; i++){
+                const condition = winningConditions[i];
+                if (options[condition[0]] === player && options[condition[1]] === player && options[condition[2]] === player) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function getBestMove(board, player) {
+            // Minimax algorithm
+            let emptyCells = [];
+            board.forEach((value, index) => {
+                if (value === "") {
+                    emptyCells.push(index);
+                }
+            });
+
+            if (checkWin("X")) {
+                return { score: -10 };
+            } else if (checkWin("O")) {
+                return { score: 10 };
+            } else if (emptyCells.length === 0) {
+                return { score: 0 };
+            }
+
+            let moves = [];
+
+            for (let i = 0; i < emptyCells.length; i++) {
+                let move = {};
+                move.index = emptyCells[i];
+                board[emptyCells[i]] = player;
+
+                if (player === "O") {
+                    let result = getBestMove(board, "X");
+                    move.score = result.score;
+                } else {
+                    let result = getBestMove(board, "O");
+                    move.score = result.score;
+                }
+
+                board[emptyCells[i]] = "";
+                moves.push(move);
+            }
+
+            let bestMove;
+            if (player === "O") {
+                let bestScore = -Infinity;
+                for (let i = 0; i < moves.length; i++) {
+                    if (moves[i].score > bestScore) {
+                        bestScore = moves[i].score;
+                        bestMove = moves[i];
+                    }
+                }
+            } else {
+                let bestScore = Infinity;
+                for (let i = 0; i < moves.length; i++) {
+                    if (moves[i].score < bestScore) {
+                        bestScore = moves[i].score;
+                        bestMove = moves[i];
+                    }
+                }
+            }
+            return bestMove;
         }
 
         function restartGame(){
@@ -200,7 +336,7 @@
             cells.forEach(cell => cell.textContent = "");
             running = true;
             if (singlePlayer && currentPlayer === "O") {
-                computerMove();
+                setTimeout(computerMove, 500);
             }
         }
     </script>
